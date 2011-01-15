@@ -9,6 +9,7 @@
 #include <sys/shm.h>
 #define _GNU_SOURCE
 #include <string.h>
+#include <signal.h>
  
 #define NAME "CACHER"
 #define SHM_KEY 1098
@@ -31,6 +32,7 @@ int main(int argc, char *argv[])
    int key;
    FILE *f;
 
+   signal(2,cleanup);
    f=fopen(getenv(NAME),"w");
    if (f==NULL){
      perror("fopen");
@@ -40,7 +42,7 @@ int main(int argc, char *argv[])
     cache_file(argv[i],key,f); 
    }
    fclose(f);
-
+   printf("Ready\n");
    while(1){
      sleep(5);
      cleanup();
@@ -54,7 +56,9 @@ void *cache_file(char *file,int key,FILE *f)
    void *ptr;
    int size;
    int fd;
+   int br;
    struct stat st;
+   struct cache_file *c;
 
 
    fd=open(file,O_RDONLY);
@@ -71,13 +75,30 @@ void *cache_file(char *file,int key,FILE *f)
       perror("shmget");
       exit(1);
    }
-   read(fd,ptr,size);
+   br=read(fd,ptr,size);
    fprintf(f,"%d:%s:%ld:%d:%d\n",key,file,ptr,shmid,size);
+   c=malloc(sizeof(struct cache_file));
+   c->id=shmid;
+   c->ptr=ptr;
+   if (head==NULL){
+     head=c;
+   }
+   else{
+     tail->next=c;
+   }
+   tail=c;
 
    return ptr;
 }
 
 void cleanup()
 {
-  
+  struct cache_file *c=head;
+  printf("Cleanup\n");  
+  while(c!=NULL){
+   shmdt(c->ptr);
+   shmctl(c->id, IPC_RMID, NULL);
+   c=c->next;
+  }
+  exit(0);
 }
