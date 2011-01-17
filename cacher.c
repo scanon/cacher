@@ -4,17 +4,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-
-
+#include <sys/shm.h>
 #include <sys/shm.h>
 #define _GNU_SOURCE
 #include <string.h>
 #include <signal.h>
  
-#define NAME "CACHER"
 #define SHM_KEY 1098
  
-void *cache_file(char *file,int key,FILE *f);
+void *cache_file(char *file,int key);
 void cleanup();
 
 struct cache_file {
@@ -26,31 +24,24 @@ struct cache_file {
 struct cache_file *head;
 struct cache_file *tail;
 
+
 int main(int argc, char *argv[])
 {
    int i;
    int key;
-   FILE *f;
+   char *name;
 
-   signal(2,cleanup);
-   f=fopen(getenv(NAME),"w");
-   if (f==NULL){
-     perror("fopen");
-     exit;
+   if (argv[1][0]=='-'){
+     cleanup();
+     return 0;
    }
    for (key=SHM_KEY,i=1;i<argc;i++,key++){
-    cache_file(argv[i],key,f); 
+    cache_file(argv[i],key); 
    }
-   fclose(f);
-   printf("Ready\n");
-   while(1){
-     sleep(5);
-     cleanup();
-     exit;
-   }
+   return 0;
 }
 
-void *cache_file(char *file,int key,FILE *f)
+void *cache_file(char *file,int key)
 {
    int shmid;
    void *ptr;
@@ -64,19 +55,22 @@ void *cache_file(char *file,int key,FILE *f)
    fd=open(file,O_RDONLY);
    fstat(fd,&st);
    size=st.st_size;
-   shmid=shmget(key, size, IPC_CREAT|0666);
+   shmid=shmget(key, size+strlen(file)+1, IPC_CREAT|0666);
    if( shmid == -1){
       perror("shmget");
-      exit(1);
+      return NULL;
     }
    ptr = (char*)shmat(shmid, 0, 0);
    if((long)ptr == -1L) {
       shmctl(shmid, IPC_RMID, NULL);
       perror("shmget");
-      exit(1);
+      return NULL;
    }
+   strcpy(ptr,file);
+   ptr+=strlen(file)+1;
    br=read(fd,ptr,size);
-   fprintf(f,"%d:%s:%ld:%d:%d\n",key,file,ptr,shmid,size);
+   printf("bytes read: %ld\n",br);
+//   fprintf(f,"%d:%s:%ld:%d:%d\n",key,file,ptr,shmid,size);
    c=malloc(sizeof(struct cache_file));
    c->id=shmid;
    c->ptr=ptr;
@@ -93,12 +87,16 @@ void *cache_file(char *file,int key,FILE *f)
 
 void cleanup()
 {
-  struct cache_file *c=head;
+  struct shm_info si;
+  struct shmid_ds ss;
+  int i,j;
   printf("Cleanup\n");  
-  while(c!=NULL){
-   shmdt(c->ptr);
-   shmctl(c->id, IPC_RMID, NULL);
-   c=c->next;
+
+  shmctl(0,SHM_INFO,(struct shmid_ds *)&si);
+  for (i=0;i<si.used_ids;i++){
+    j=shmctl(i,SHM_STAT,&ss);
+    if (j>0){
+      shmctl(j, IPC_RMID, NULL);
+    } 
   }
-  exit(0);
 }
