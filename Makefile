@@ -1,9 +1,7 @@
 
-all: cacher mmap_test libtrap.so
+all: cacher libtrap.so
 
 cacher: cacher.o
-
-mmap_test: mmap_test.o
 
 libtrap.so: trap_so.c
 	rm -f libtrap.so*
@@ -12,4 +10,4 @@ libtrap.so: trap_so.c
 	ln -s libtrap.so.1 libtrap.so
 
 clean:
-	rm -f libtrap.so* *.o cacher mmap_test
+	rm -f libtrap.so* *.o cacher
