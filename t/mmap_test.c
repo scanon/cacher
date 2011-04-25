@@ -9,8 +9,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "read_status.h"
-
 #define MAX_CACHE 20
 
  

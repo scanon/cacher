@@ -21,14 +21,23 @@ struct cache_file_t {
 void * (*next_mmap)(void *start, size_t length, int prot, int flags, int fd, off_t offset);
 void * (*next_mmap64)(void *__addr, size_t __len, int __prot, int __flags, int __fd, __off64_t __offset);
 int (*next_munmap)(void *start, size_t length);
+int (*next_open)(const char *pathname, int flags, mode_t mode);
 void init(void);
 void *lookup_file(int fd,struct cache_file_t *cf);
 int check_ptr(void *ptr);
 
 #define MAX_CACHE 20
 struct cache_file_t cf[MAX_CACHE];
-int debug=0;
+int debug=1;
 
+int open(const char *pathname, int flags, mode_t mode)
+{
+  void *p=NULL;
+
+  if (next_mmap == NULL)
+    init();
+  return next_open(pathname,flags,mode);
+}
 void * mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset)
 {
   void *p=NULL;
@@ -112,6 +121,7 @@ void init(void)
   next_mmap64 = dlsym(RTLD_NEXT, "mmap64");
   next_mmap = dlsym(RTLD_NEXT, "mmap");
   next_munmap = dlsym(RTLD_NEXT, "munmap");
+  next_open = dlsym(RTLD_NEXT, "open");
 }
 
 void * lookup_file(int fd,struct cache_file_t *cf)
@@ -129,7 +139,7 @@ void * lookup_file(int fd,struct cache_file_t *cf)
 //  fprintf(stderr,"DEBUG: %s %s\n",buffer,buff2);
   i=0;
   while (i<MAX_CACHE && cf[i].filename!=NULL){
-   if (strstr(buff2,cf[i].filename)!=0){
+   if (strcmp(buff2,cf[i].filename)==0){
      if (debug)
        fprintf(stderr,"found ptr 0x%lx\n",(long)cf[i].ptr);
      return cf[i].ptr;

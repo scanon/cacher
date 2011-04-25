@@ -81,6 +81,12 @@ size_t cache_file(char *file,int key)
      ptr+=br;
      total+=br;
    }
+   if (total!=size){
+     fprintf(stderr,"failed to read entire file (%s).\n",file);
+     shmdt(ptr);
+     shmctl(shmid, IPC_RMID, NULL);
+     return 0;
+   }
    shmdt(ptr);
    if (debug)
      fprintf(stderr,"%-70s: cached %10ld bytes in %3d seconds\n",file,total,time(NULL)-start);
@@ -99,7 +105,7 @@ void cleanup()
   shmctl(0,SHM_INFO,(struct shmid_ds *)&si);
   for (i=0;i<si.used_ids;i++){
     j=shmctl(i,SHM_STAT,&ss);
-    if (j>0){
+    if (j>=0){
       shmctl(j, IPC_RMID, NULL);
     } 
   }
@@ -118,7 +124,7 @@ void status()
   shmctl(0,SHM_INFO,(struct shmid_ds *)&si);
   for (i=0;i<si.used_ids;i++){
     j=shmctl(i,SHM_STAT,&ss);
-    if (j>0 && ss.shm_perm.uid==getuid()){
+    if (j>=0 && ss.shm_perm.uid==getuid()){
      key=ss.shm_perm.__key;
      size=ss.shm_segsz;   
      shm_id = shmget(key, size, 0600);
