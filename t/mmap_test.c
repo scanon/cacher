@@ -23,7 +23,6 @@ int main(int argc, char *argv[])
 
    fstat(fd,&st);
    size=st.st_size;
-
    p=(void *)mmap(0,size,PROT_READ,MAP_PRIVATE,fd,0L);
    if ((long)p==-1){
      perror("mmap failed\n");

@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/shm.h>
-#include <sys/shm.h>
 #define _GNU_SOURCE
 #include <string.h>
 #include <signal.h>
@@ -51,7 +50,7 @@ size_t cache_file(char *file,int key)
 {
    int shmid;
    void *ptr;
-   int size;
+   size_t size;
    int fd;
    size_t br;
    size_t total;
@@ -63,9 +62,11 @@ size_t cache_file(char *file,int key)
    fd=open(file,O_RDONLY);
    fstat(fd,&st);
    size=st.st_size;
-   shmid=shmget(key, size+strlen(file)+1, IPC_CREAT|0600);
+   if (debug)
+   fprintf(stderr,"Size=%ld\n",size); 
+   shmid=shmget(key, size+(size_t)strlen(file)+(size_t)1, IPC_CREAT|0600);
    if( shmid == -1){
-      perror("shmget");
+      perror("shmget:");
       return 0;
     }
    ptr = (char*)shmat(shmid, 0, 0);
