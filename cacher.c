@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
    char *name;
    time_t start;
    size_t total=0;
+   pid_t pid;
 
    start=time(NULL);
    if (getenv("DEBUG_CACHER")!=NULL)
@@ -38,12 +39,21 @@ int main(int argc, char *argv[])
      cleanup();
      return 0;
    }
+   signal(2,cleanup);
+   signal(15,cleanup);
    for (key=SHM_KEY,i=1;i<argc;i++,key++){
       total+=cache_file(argv[i],key); 
    }
    if (debug)
      fprintf(stderr,"Total: %ld bytes in %ld seconds (%7.2f MB/s)\n",total,time(NULL)-start,(double)total/(double)(1024.0*1024.0*(time(NULL)-start)));
-   return 0;
+   if (pid=fork()){ //parent
+     if (debug)
+       fprintf(stderr,"Forking\n");
+     return 0;
+   }
+   else{
+     while(1){ sleep(60); }
+   }
 }
 
 size_t cache_file(char *file,int key)
@@ -63,7 +73,7 @@ size_t cache_file(char *file,int key)
    fstat(fd,&st);
    size=st.st_size;
    if (debug)
-   fprintf(stderr,"Size=%ld\n",size); 
+   fprintf(stderr,"File=%s Size=%ld\n",file,size); 
    shmid=shmget(key, size+(size_t)strlen(file)+(size_t)1, IPC_CREAT|0600);
    if( shmid == -1){
       perror("shmget:");
@@ -101,15 +111,18 @@ void cleanup()
   struct shmid_ds ss;
   int i,j;
   if (debug)
-    fprintf(stderr,"Cleanup\n");  
+    fprintf(stderr,"Cacher Cleanup\n");  
 
   shmctl(0,SHM_INFO,(struct shmid_ds *)&si);
   for (i=0;i<si.used_ids;i++){
     j=shmctl(i,SHM_STAT,&ss);
     if (j>=0){
+      if (debug)
+        fprintf(stderr,"Removing %lx\n",j);  
       shmctl(j, IPC_RMID, NULL);
     } 
   }
+  exit(0);
 }
 
 void status()
@@ -138,7 +151,8 @@ void status()
           fprintf(stderr,"*** shmat error cacher ***\n");
           exit(1);
      }
-      printf("0x%08x: %s\n",ss.shm_perm.__key,ptr);
+     printf("0x%08x: %s\n",ss.shm_perm.__key,ptr);
+     shmdt(ptr);
     } 
   }
 }

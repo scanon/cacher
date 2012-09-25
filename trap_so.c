@@ -36,9 +36,12 @@ int (*next_open)(const char *pathname, int flags, mode_t mode);
 ssize_t (*next_read)(int fd, void *buf, size_t count);
 size_t (*next_fread)(void *ptr, size_t size, size_t nmemb, FILE *stream);
 off_t (*next_lseek)(int fd, off_t offset, int whence);
+off_t (*next_tell)(int fd);
 int (*next_fseek)(FILE *stream, off_t offset, int whence);
 int (*next_close)(int fd);
 int (*next_fclose)(FILE *stream);
+int (*next_fseek)(FILE *stream, off_t offset, int whence);
+off_t (*next_ftell)(FILE *stream);
 void init(void);
 struct cache_file_t *lookup_file(int fd,struct cache_file_t *cf);
 void *lookup_ptr(int fd,struct cache_file_t *cf);
@@ -107,7 +110,7 @@ off_t lseek(int fd, off_t offset, int whence)
   struct cache_file_t *c=NULL;
   if (next_mmap == NULL)
     init();
-  pdebug("lseek: trapped fd=%d offset=%ld\n",fd,offset);
+  pdebug("lseek: trapped fd=%d offset=%ld whence=%d\n",fd,offset,whence);
   if (iscached(fd)){ 
     c=cachefd[fd].cache;
     if (whence==SEEK_SET)
@@ -119,7 +122,7 @@ off_t lseek(int fd, off_t offset, int whence)
     else
       return EINVAL;
 
-    pdebug("lseek: cached fd=%d offset=%d size=%ld\n",fd,cachefd[fd].off,c->size);
+    pdebug("lseek: cached fd=%d offset=%d whence=%d\n",fd,cachefd[fd].off,whence);
     if (cachefd[fd].off < 0 ){
       cachefd[fd].off=0;
       return EINVAL;
@@ -131,16 +134,55 @@ off_t lseek(int fd, off_t offset, int whence)
   }
 }
 
+off_t tell(int fd)
+{
+  struct cache_file_t *c=NULL;
+  if (next_mmap == NULL)
+    init();
+  pdebug("tell: trapped fd=%d\n",fd);
+  if (iscached(fd)){ 
+    c=cachefd[fd].cache;
+    return cachefd[fd].off;
+  }
+  else{
+    return next_tell(fd);
+  }
+}
+
 int fseek(FILE *stream, off_t offset, int whence)
 {
   int fd=fileno(stream);
   if (next_mmap == NULL)
     init();
   pdebug("fseek: trapped fd=%d offset=%ld\n",fd,offset);
-  if (iscached(fd))
-    return (lseek(fd,offset,whence));
+  if (iscached(fd)){
+    lseek(fd,offset,whence);
+    return 0;
+  }
   else
     return next_fseek(stream,offset,whence);
+}
+
+int fseeko(FILE *stream, off_t offset, int whence)
+{
+  return fseek(stream ,offset,whence);
+}
+
+off_t ftell(FILE *stream)
+{
+  int fd=fileno(stream);
+  if (next_mmap == NULL)
+    init();
+  pdebug("ftell: trapped fd=%d\n",fd);
+  if (iscached(fd))
+    return (tell(fd));
+  else
+    return next_ftell(stream);
+}
+
+off_t ftello(FILE *stream)
+{
+  return ftell(stream);
 }
 
 ssize_t read(int fd, void *buf, size_t count)
@@ -302,9 +344,11 @@ void init(void)
   next_read = dlsym(RTLD_NEXT, "read");
   next_fread = dlsym(RTLD_NEXT, "fread");
   next_lseek = dlsym(RTLD_NEXT, "lseek");
+  next_tell = dlsym(RTLD_NEXT, "tell");
   next_fseek = dlsym(RTLD_NEXT, "fseek");
   next_close = dlsym(RTLD_NEXT, "close");
   next_fclose = dlsym(RTLD_NEXT, "fclose");
+  next_ftell = dlsym(RTLD_NEXT, "ftell");
 }
 
 struct cache_file_t * lookup_file(int fd,struct cache_file_t *cf)
